@@ -1,0 +1,60 @@
+name: Trigger auto deployment for containerappvj01
+
+# When this action will be executed
+on:
+  # Automatically trigger it when detected changes in repo
+  push:
+    branches: 
+      [ main ]
+    paths:
+    - '**'
+    - '.github/workflows/containerappvj01-AutoDeployTrigger-aa403e82-3546-4b9d-8da5-47f4beac005d.yml'
+
+  # Allow mannually trigger 
+  workflow_dispatch:      
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout to the branch
+        uses: actions/checkout@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Log in to container registry
+        uses: docker/login-action@v1
+        with:
+          registry: vijayacr04.azurecr.io
+          username: ${{ secrets.CONTAINERAPPVJ01_REGISTRY_USERNAME }}
+          password: ${{ secrets.CONTAINERAPPVJ01_REGISTRY_PASSWORD }}
+
+      - name: Build and push container image to registry
+        uses: docker/build-push-action@v2
+        with:
+          push: true
+          tags: vijayacr04.azurecr.io/containerappvj01:${{ github.sha }}
+          file: ./Dockerfile
+          context: ./
+
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.CONTAINERAPPVJ01_AZURE_CREDENTIALS }}
+
+
+      - name: Deploy to containerapp
+        uses: azure/CLI@v1
+        with:
+          inlineScript: |
+            az config set extension.use_dynamic_install=yes_without_prompt
+            az containerapp registry set -n containerappvj01 -g VJRG2 --server vijayacr04.azurecr.io --username  ${{ secrets.CONTAINERAPPVJ01_REGISTRY_USERNAME }} --password ${{ secrets.CONTAINERAPPVJ01_REGISTRY_PASSWORD }}
+            az containerapp update -n containerappvj01 -g VJRG2 --image vijayacr04.azurecr.io/containerappvj01:${{ github.sha }}
